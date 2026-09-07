@@ -1,5 +1,6 @@
 package calc.core.parser
 
+import calc.core.lexer.CURRENCY_SYMBOLS
 import calc.core.lexer.Keyword
 import calc.core.lexer.Lexer
 import calc.core.lexer.MAGNITUDE_WORDS
@@ -135,11 +136,15 @@ class Parser(private val tokens: List<Token>) {
                 inner
             }
 
-            // `$50` — currency symbol before the amount.
-            t.type == TokenType.WORD && t.text in setOf("$", "£", "€", "¥") -> {
+            // `$50`, `$1.2 million` — currency symbol before the amount.
+            //
+            // Magnitude words are folded here rather than by falling through to
+            // parseNumberTail: the symbol has already fixed the unit, so the tail's
+            // `%` and unit-suffix handling must not get a second say.
+            t.type == TokenType.WORD && t.text in CURRENCY_SYMBOLS -> {
                 if (!at(TokenType.NUMBER)) throw ParseError.Expected("an amount", peek())
-                val n = next().number!!
-                UnitApply(Literal(Quantity.scalar(n)), t.text)
+                val amount = foldMagnitudeWords(next().number!!)
+                UnitApply(Literal(Quantity.scalar(amount)), t.text)
             }
 
             t.type == TokenType.WORD -> Ident(t.text)
@@ -154,14 +159,7 @@ class Parser(private val tokens: List<Token>) {
      * rather than as an infix case.
      */
     private fun parseNumberTail(raw: BigDecimal): Expr {
-        var value = raw
-
-        // `1.2 million`
-        while (at(TokenType.WORD)) {
-            val scale = MAGNITUDE_WORDS[peek().text.lowercase()] ?: break
-            next()
-            value = value.multiply(scale, MC)
-        }
+        val value = foldMagnitudeWords(raw)
 
         if (at(TokenType.PERCENT)) {
             next()
@@ -180,6 +178,24 @@ class Parser(private val tokens: List<Token>) {
         }
 
         return Literal(Quantity.scalar(value))
+    }
+
+    /**
+     * Folds scale words that immediately follow a number: `1.2 million` -> 1200000,
+     * `1 hundred thousand` -> 100000.
+     *
+     * Shared by the bare-number and currency-symbol paths so that `$1.2 million` and
+     * `1.2 million USD` agree. Only MAGNITUDE_WORDS are consumed; any other word is
+     * left for the caller, which is what keeps `1.2 gazillion` a rejection.
+     */
+    private fun foldMagnitudeWords(raw: BigDecimal): BigDecimal {
+        var value = raw
+        while (at(TokenType.WORD)) {
+            val scale = MAGNITUDE_WORDS[peek().text.lowercase()] ?: break
+            next()
+            value = value.multiply(scale, MC)
+        }
+        return value
     }
 
     private fun expectName(what: String): String {

@@ -19,6 +19,9 @@ private val LINES = listOf(
     "total = 5 km + 300 m",
     "what is 20% of 80",
     "350 MB / 8 Mbps",
+    "\$1.2 million",
+    "\$1.2 million + \$300 thousand",
+    "\$1.2 gazillion",
 )
 
 fun main() {
