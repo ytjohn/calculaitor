@@ -50,6 +50,14 @@ val MAGNITUDE_WORDS: Map<String, BigDecimal> = mapOf(
     "trillion" to BigDecimal("1000000000000"),
 )
 
+/**
+ * Currency symbols written before the amount: `$50`.
+ *
+ * Shared with the parser so the two cannot drift — the lexer emits these as WORD
+ * tokens and the parser is what knows they are a prefix marker.
+ */
+val CURRENCY_SYMBOLS: Set<String> = setOf("$", "£", "€", "¥")
+
 private val KEYWORDS: Map<String, Keyword> = mapOf(
     "of" to Keyword.OF,
     "on" to Keyword.ON,
@@ -89,7 +97,7 @@ class Lexer(private val src: String) {
                 }
 
                 // Currency symbols are prefix markers; the parser attaches them to the next number.
-                c in "$£€¥" -> { i++; out += Token(TokenType.WORD, c.toString(), start) }
+                c.toString() in CURRENCY_SYMBOLS -> { i++; out += Token(TokenType.WORD, c.toString(), start) }
 
                 else -> throw LexError("Unexpected character '$c'", start)
             }
